@@ -589,9 +589,14 @@ function ResumeBuilderPage({ token }) {
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
 
-  const upload = async () => {
+  const upload = async ({ rethrow = false } = {}) => {
     if (!file) {
-      throw new Error('Please select a PDF resume first.');
+      const message = 'Please select a PDF resume first.';
+      setError(message);
+      if (rethrow) {
+        throw new Error(message);
+      }
+      return null;
     }
     setError('');
     setUploading(true);
@@ -609,7 +614,10 @@ function ResumeBuilderPage({ token }) {
       return uploaded;
     } catch (err) {
       setError(err.message);
-      throw err;
+      if (rethrow) {
+        throw err;
+      }
+      return null;
     } finally {
       setUploading(false);
     }
@@ -621,7 +629,7 @@ function ResumeBuilderPage({ token }) {
     try {
       let activeResume = resume;
       if (!activeResume?.id) {
-        activeResume = await upload();
+        activeResume = await upload({ rethrow: true });
       }
 
       const analyzed = await apiRequest('/api/resume/analyze', {
@@ -647,7 +655,13 @@ function ResumeBuilderPage({ token }) {
         <label>Upload PDF Resume</label>
         <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} />
         <div className="hero-actions">
-          <button className="btn btn-ghost" onClick={upload} disabled={uploading || analyzing}>
+          <button
+            className="btn btn-ghost"
+            onClick={() => {
+              upload().catch(() => {});
+            }}
+            disabled={uploading || analyzing}
+          >
             {uploading ? 'Uploading...' : 'Upload PDF'}
           </button>
           <button
