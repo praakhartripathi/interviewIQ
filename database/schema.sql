@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS resumes (
     file_url VARCHAR(500) NOT NULL,
     ats_score INT,
     ai_feedback TEXT,
+    content_text LONGTEXT,
+    project_insights TEXT,
+    recommended_roles TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_resumes_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

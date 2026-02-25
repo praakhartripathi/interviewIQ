@@ -345,6 +345,23 @@ select {
   padding: 10px 12px;
 }
 
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 62px;
+}
+
+.toggle-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+}
+
 .auth-form label {
   font-size: 14px;
   color: #cbd5e1;
@@ -361,6 +378,23 @@ select {
   background: transparent;
   color: #93c5fd;
   cursor: pointer;
+}
+
+.or-line {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12px;
+  margin: 2px 0;
+}
+
+.btn-google {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: #fff;
+  color: #0f172a;
+}
+
+.btn-google:hover {
+  background: #e2e8f0;
 }
 
 .dashboard-shell {
@@ -426,6 +460,20 @@ select {
 
 .tool-card {
   margin-top: 12px;
+}
+
+.analysis-result {
+  margin-top: 14px;
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.65);
+}
+
+.analysis-result p {
+  margin: 8px 0;
+  color: #dbeafe;
+  line-height: 1.5;
 }
 
 .chat-area {

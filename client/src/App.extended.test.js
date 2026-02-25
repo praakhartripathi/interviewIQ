@@ -1,17 +1,17 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import App from './App';
-import { apiRequest } from './api';
+import { apiRequest, clearAuthToken, clearStoredUser } from './api';
 
 jest.mock('./api', () => ({
   ...jest.requireActual('./api'),
   apiRequest: jest.fn(),
 }));
 
-const mockNavigate = jest.fn();
-
 describe('App component', () => {
   beforeEach(() => {
-    apiRequest.mockClear();
+    apiRequest.mockReset();
+    clearAuthToken();
+    clearStoredUser();
     window.history.pushState({}, '', '/');
   });
 
@@ -21,28 +21,44 @@ describe('App component', () => {
     expect(heading).toBeInTheDocument();
   });
 
-  test('clicking "Get Started" without being logged in navigates to the signup page', () => {
+  test('clicking Get Started without auth opens signup page', () => {
     render(<App />);
     fireEvent.click(screen.getByText('Get Started'));
-    const signupHeading = screen.getByText(/Signup/i);
-    expect(signupHeading).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Signup' })).toBeInTheDocument();
   });
 
-  test('clicking "Login" on the navbar navigates to the login page', () => {
+  test('clicking Login on navbar opens login page', () => {
     render(<App />);
     fireEvent.click(screen.getByText('Login'));
-    const loginHeading = screen.getByText(/Login/i);
-    expect(loginHeading).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Welcome Back' })).toBeInTheDocument();
   });
 
-  test('successful login navigates to the dashboard', async () => {
-    apiRequest.mockResolvedValue({
-      token: 'test-token',
-      userId: '1',
-      name: 'Test User',
-      email: 'test@example.com',
-      role: 'JOB_SEEKER',
+  test('successful login navigates to resume builder first', async () => {
+    apiRequest.mockImplementation((path) => {
+      if (path === '/api/auth/login') {
+        return Promise.resolve({
+          token: 'test-token',
+          userId: 1,
+          name: 'Test User',
+          email: 'test@example.com',
+          role: 'JOB_SEEKER',
+        });
+      }
+      if (path === '/api/users/me') {
+        return Promise.resolve({
+          id: 1,
+          name: 'Test User',
+          email: 'test@example.com',
+          role: 'JOB_SEEKER',
+          profileCompletion: 90,
+        });
+      }
+      if (path === '/api/interview/history') {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve({});
     });
+
     render(<App />);
     fireEvent.click(screen.getByText('Login'));
 
@@ -50,18 +66,35 @@ describe('App component', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
     fireEvent.click(screen.getByRole('button', { name: 'Login' }));
 
-    await screen.findByText('Welcome Test User');
-    expect(screen.getByText('Welcome Test User')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Resume Builder' })).toBeInTheDocument();
   });
 
-  test('logout button logs the user out and navigates to the home page', async () => {
-    apiRequest.mockResolvedValue({
-      token: 'test-token',
-      userId: '1',
-      name: 'Test User',
-      email: 'test@example.com',
-      role: 'JOB_SEEKER',
+  test('logout returns user to home page', async () => {
+    apiRequest.mockImplementation((path) => {
+      if (path === '/api/auth/login') {
+        return Promise.resolve({
+          token: 'test-token',
+          userId: 1,
+          name: 'Test User',
+          email: 'test@example.com',
+          role: 'JOB_SEEKER',
+        });
+      }
+      if (path === '/api/users/me') {
+        return Promise.resolve({
+          id: 1,
+          name: 'Test User',
+          email: 'test@example.com',
+          role: 'JOB_SEEKER',
+          profileCompletion: 90,
+        });
+      }
+      if (path === '/api/interview/history') {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve({});
     });
+
     render(<App />);
     fireEvent.click(screen.getByText('Login'));
 
@@ -69,9 +102,8 @@ describe('App component', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
     fireEvent.click(screen.getByRole('button', { name: 'Login' }));
 
-    await screen.findByText('Welcome Test User');
+    expect(await screen.findByRole('heading', { name: 'Resume Builder' })).toBeInTheDocument();
     fireEvent.click(screen.getByText('Logout'));
-    const heading = screen.getByText(/Build AI-Powered Resumes/i);
-    expect(heading).toBeInTheDocument();
+    expect(await screen.findByText(/Build AI-Powered Resumes/i)).toBeInTheDocument();
   });
 });

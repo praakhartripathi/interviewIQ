@@ -33,6 +33,11 @@ services:
       DB_NAME: interviewiq
       DB_USERNAME: interviewiq
       DB_PASSWORD: interviewiqpass
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      MISTRAL_MODEL: ${MISTRAL_MODEL:-mistral-small-latest}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.1-8b-instant}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     volumes:
       - ./server:/app
       - maven_cache:/root/.m2

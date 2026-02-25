@@ -10,6 +10,39 @@ import {
   setStoredUser,
 } from './api';
 
+const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
+let googleScriptPromise;
+
+function ensureGoogleScript() {
+  if (window.google?.accounts?.id) {
+    return Promise.resolve();
+  }
+
+  if (googleScriptPromise) {
+    return googleScriptPromise;
+  }
+
+  googleScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-google-identity="true"]');
+    if (existing) {
+      existing.addEventListener('load', resolve, { once: true });
+      existing.addEventListener('error', reject, { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.dataset.googleIdentity = 'true';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Google Sign-In script'));
+    document.body.appendChild(script);
+  });
+
+  return googleScriptPromise;
+}
+
 function App() {
   const [path, setPath] = useState(window.location.pathname);
   const [token, setToken] = useState(getAuthToken());
@@ -70,7 +103,7 @@ function App() {
     setStoredUser(safeUser);
     setToken(data.token);
     setUser(safeUser);
-    navigate('/dashboard');
+    navigate('/resume-builder');
   };
 
   const onClickGetStarted = () => {
@@ -129,9 +162,27 @@ function Navbar({ navigate, isLoggedIn, onGetStarted, currentPath }) {
       </button>
 
       <nav className="nav-links">
-        <button className={currentPath === '/features' ? 'active' : ''} onClick={() => navigate('/features')}>Features</button>
-        <button className={currentPath === '/pricing' ? 'active' : ''} onClick={() => navigate('/pricing')}>Pricing</button>
-        <button className={currentPath === '/login' ? 'active' : ''} onClick={() => navigate('/login')}>Login</button>
+        <a
+          href="/features"
+          className={currentPath === '/features' ? 'active' : ''}
+          onClick={(e) => { e.preventDefault(); navigate('/features'); }}
+        >
+          Features
+        </a>
+        <a
+          href="/pricing"
+          className={currentPath === '/pricing' ? 'active' : ''}
+          onClick={(e) => { e.preventDefault(); navigate('/pricing'); }}
+        >
+          Pricing
+        </a>
+        <a
+          href="/login"
+          className={currentPath === '/login' ? 'active' : ''}
+          onClick={(e) => { e.preventDefault(); navigate('/login'); }}
+        >
+          Login
+        </a>
       </nav>
 
       <button className="btn btn-light" onClick={onGetStarted}>
@@ -222,10 +273,10 @@ function PricingPage({ navigate, isLoggedIn }) {
       <div className="pricing-grid">
         <article className="glass plan">
           <h3>Free</h3>
-          <p className="price">$0</p>
+          <p className="price">₹0</p>
           <ul>
-            <li>Basic resume builder</li>
-            <li>Limited ATS analysis</li>
+            <li>Basic resume upload and ATS check</li>
+            <li>Project insight summary</li>
             <li>3 mock interview sessions/month</li>
           </ul>
           <button className="btn btn-ghost" onClick={() => navigate(isLoggedIn ? '/dashboard' : '/signup')}>Start Free</button>
@@ -233,7 +284,7 @@ function PricingPage({ navigate, isLoggedIn }) {
 
         <article className="glass plan plan-pro">
           <h3>Pro</h3>
-          <p className="price">$19/mo</p>
+          <p className="price">₹999/mo</p>
           <ul>
             <li>Advanced resume optimization</li>
             <li>Unlimited AI mock interviews</li>
@@ -249,8 +300,10 @@ function PricingPage({ navigate, isLoggedIn }) {
 function LoginPage({ onAuthSuccess, navigate }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -269,18 +322,77 @@ function LoginPage({ onAuthSuccess, navigate }) {
     }
   };
 
+  const loginWithGoogle = async () => {
+    setError('');
+
+    if (!GOOGLE_CLIENT_ID) {
+      setError('Google sign-in is not configured. Set REACT_APP_GOOGLE_CLIENT_ID in client env.');
+      return;
+    }
+
+    setGoogleLoading(true);
+    try {
+      await ensureGoogleScript();
+      if (!window.google?.accounts?.id) {
+        throw new Error('Google Sign-In is unavailable in this browser');
+      }
+
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (credentialResponse) => {
+          try {
+            const data = await apiRequest('/api/auth/google', {
+              method: 'POST',
+              body: { idToken: credentialResponse.credential },
+            });
+            onAuthSuccess(data);
+          } catch (err) {
+            setError(err.message);
+          } finally {
+            setGoogleLoading(false);
+          }
+        },
+      });
+
+      window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed?.() || notification.isSkippedMoment?.()) {
+          setGoogleLoading(false);
+          setError('Google popup was blocked. Enable popups and try again.');
+        }
+      });
+    } catch (err) {
+      setGoogleLoading(false);
+      setError(err.message);
+    }
+  };
+
   return (
     <section className="auth-wrap glass">
-      <h2>Login</h2>
+      <h2>Welcome Back</h2>
       <form onSubmit={submit} className="auth-form">
         <label>Email</label>
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <input aria-label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
 
         <label>Password</label>
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <div className="password-field">
+          <input
+            aria-label="Password"
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          <button type="button" className="text-link toggle-btn" onClick={() => setShowPassword((prev) => !prev)}>
+            {showPassword ? 'Hide' : 'Show'}
+          </button>
+        </div>
 
         {error ? <p className="form-error">{error}</p> : null}
         <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Logging in...' : 'Login'}</button>
+        <div className="or-line">or</div>
+        <button className="btn btn-google" type="button" onClick={loginWithGoogle} disabled={googleLoading}>
+          {googleLoading ? 'Connecting...' : 'Continue with Google'}
+        </button>
       </form>
       <p className="muted">No account? <button className="text-link" onClick={() => navigate('/signup')}>Create one</button></p>
     </section>
@@ -297,6 +409,9 @@ function SignupPage({ onAuthSuccess, navigate }) {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const onChange = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
@@ -324,30 +439,100 @@ function SignupPage({ onAuthSuccess, navigate }) {
     }
   };
 
+  const signupWithGoogle = async () => {
+    setError('');
+
+    if (!GOOGLE_CLIENT_ID) {
+      setError('Google sign-in is not configured. Set REACT_APP_GOOGLE_CLIENT_ID in client env.');
+      return;
+    }
+
+    setGoogleLoading(true);
+    try {
+      await ensureGoogleScript();
+      if (!window.google?.accounts?.id) {
+        throw new Error('Google Sign-In is unavailable in this browser');
+      }
+
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (credentialResponse) => {
+          try {
+            const data = await apiRequest('/api/auth/google', {
+              method: 'POST',
+              body: { idToken: credentialResponse.credential },
+            });
+            onAuthSuccess(data);
+          } catch (err) {
+            setError(err.message);
+          } finally {
+            setGoogleLoading(false);
+          }
+        },
+      });
+
+      window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed?.() || notification.isSkippedMoment?.()) {
+          setGoogleLoading(false);
+          setError('Google popup was blocked. Enable popups and try again.');
+        }
+      });
+    } catch (err) {
+      setGoogleLoading(false);
+      setError(err.message);
+    }
+  };
+
   return (
     <section className="auth-wrap glass">
       <h2>Signup</h2>
       <form onSubmit={submit} className="auth-form">
         <label>Full Name</label>
-        <input value={form.fullName} onChange={(e) => onChange('fullName', e.target.value)} required />
+        <input aria-label="Full Name" value={form.fullName} onChange={(e) => onChange('fullName', e.target.value)} required />
 
         <label>Email</label>
-        <input type="email" value={form.email} onChange={(e) => onChange('email', e.target.value)} required />
+        <input aria-label="Email" type="email" value={form.email} onChange={(e) => onChange('email', e.target.value)} required />
 
         <label>Password</label>
-        <input type="password" value={form.password} onChange={(e) => onChange('password', e.target.value)} required />
+        <div className="password-field">
+          <input
+            aria-label="Password"
+            type={showPassword ? 'text' : 'password'}
+            value={form.password}
+            onChange={(e) => onChange('password', e.target.value)}
+            required
+          />
+          <button type="button" className="text-link toggle-btn" onClick={() => setShowPassword((prev) => !prev)}>
+            {showPassword ? 'Hide' : 'Show'}
+          </button>
+        </div>
 
         <label>Confirm Password</label>
-        <input type="password" value={form.confirmPassword} onChange={(e) => onChange('confirmPassword', e.target.value)} required />
+        <div className="password-field">
+          <input
+            aria-label="Confirm Password"
+            type={showConfirmPassword ? 'text' : 'password'}
+            value={form.confirmPassword}
+            onChange={(e) => onChange('confirmPassword', e.target.value)}
+            required
+          />
+          <button type="button" className="text-link toggle-btn" onClick={() => setShowConfirmPassword((prev) => !prev)}>
+            {showConfirmPassword ? 'Hide' : 'Show'}
+          </button>
+        </div>
 
         <label>Role</label>
-        <select value={form.role} onChange={(e) => onChange('role', e.target.value)}>
+        <select aria-label="Role" value={form.role} onChange={(e) => onChange('role', e.target.value)}>
           <option value="JOB_SEEKER">Job Seeker</option>
           <option value="STUDENT">Student</option>
         </select>
 
         {error ? <p className="form-error">{error}</p> : null}
         <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Creating account...' : 'Create Account'}</button>
+        <div className="or-line">or</div>
+        <button className="btn btn-google" type="button" onClick={signupWithGoogle} disabled={googleLoading}>
+          {googleLoading ? 'Connecting...' : 'Continue with Google'}
+        </button>
       </form>
       <p className="muted">Already have an account? <button className="text-link" onClick={() => navigate('/login')}>Login</button></p>
     </section>
@@ -401,10 +586,15 @@ function ResumeBuilderPage({ token }) {
   const [resume, setResume] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   const upload = async () => {
-    if (!file) return;
+    if (!file) {
+      throw new Error('Please select a PDF resume first.');
+    }
     setError('');
+    setUploading(true);
     try {
       const form = new FormData();
       form.append('file', file);
@@ -416,23 +606,34 @@ function ResumeBuilderPage({ token }) {
       });
       setResume(uploaded);
       setResult(null);
+      return uploaded;
     } catch (err) {
       setError(err.message);
+      throw err;
+    } finally {
+      setUploading(false);
     }
   };
 
   const analyze = async () => {
-    if (!resume?.id) return;
     setError('');
+    setAnalyzing(true);
     try {
+      let activeResume = resume;
+      if (!activeResume?.id) {
+        activeResume = await upload();
+      }
+
       const analyzed = await apiRequest('/api/resume/analyze', {
         method: 'POST',
         token,
-        body: { resumeId: resume.id },
+        body: { resumeId: activeResume.id },
       });
       setResult(analyzed);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -440,15 +641,33 @@ function ResumeBuilderPage({ token }) {
     <div>
       <h2>Resume Builder</h2>
       <div className="glass tool-card">
+        <p className="muted">
+          Step 1: Upload resume. Step 2: Run AI analysis for ATS score, project review, and best-fit job positions.
+        </p>
         <label>Upload PDF Resume</label>
         <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} />
         <div className="hero-actions">
-          <button className="btn btn-ghost" onClick={upload}>Upload PDF</button>
-          <button className="btn btn-primary" onClick={analyze} disabled={!resume}>AI Analyze</button>
+          <button className="btn btn-ghost" onClick={upload} disabled={uploading || analyzing}>
+            {uploading ? 'Uploading...' : 'Upload PDF'}
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={analyze}
+            disabled={uploading || analyzing || (!resume && !file)}
+          >
+            {analyzing ? 'Analyzing...' : 'AI Analyze'}
+          </button>
         </div>
         {error ? <p className="form-error">{error}</p> : null}
         {resume ? <p className="muted">Uploaded: {resume.fileUrl}</p> : null}
-        {result ? <p className="muted">ATS Score: {result.atsScore} | Feedback: {result.aiFeedback}</p> : null}
+        {result ? (
+          <div className="analysis-result">
+            <p><strong>ATS Score:</strong> {result.atsScore}/100</p>
+            <p><strong>Project Insights:</strong> {result.projectInsights}</p>
+            <p><strong>Best-fit Positions:</strong> {result.recommendedRoles}</p>
+            <p><strong>AI Feedback:</strong> {result.aiFeedback}</p>
+          </div>
+        ) : null}
       </div>
     </div>
   );
